@@ -99,11 +99,18 @@ bool GazeboSystem::initSim(
   joint_controller_ = this->dataPtr->parent_model_->GetJointController();
   joint_controller_->Reset();
   steering_joint_ = this->dataPtr->parent_model_->GetJoint(hardware_info.joints[1].name);
-  wheel_front_joint_ = this->dataPtr->parent_model_->GetJoint(hardware_info.joints[2].name);
+  traction_joint_ = this->dataPtr->parent_model_->GetJoint(hardware_info.joints[2].name);
   joint_controller_->AddJoint(steering_joint_);
-  joint_controller_->AddJoint(wheel_front_joint_);
-  joint_controller_->SetVelocityPID(steering_joint_->GetScopedName(), gazebo::common::PID(2, 0, 0));
-  joint_controller_->SetPositionPID(wheel_front_joint_->GetScopedName(), gazebo::common::PID(2, 0, 0));
+  joint_controller_->AddJoint(traction_joint_);
+
+  double steering_P = std::stod(hardware_info.joints[1].parameters.at("P"));
+  double steering_I = std::stod(hardware_info.joints[1].parameters.at("I"));
+  double steering_D = std::stod(hardware_info.joints[1].parameters.at("D"));
+  double traction_P = std::stod(hardware_info.joints[2].parameters.at("P"));
+  double traction_I = std::stod(hardware_info.joints[2].parameters.at("I"));
+  double traction_D = std::stod(hardware_info.joints[2].parameters.at("D"));
+  joint_controller_->SetVelocityPID(steering_joint_->GetScopedName(), gazebo::common::PID(traction_P, traction_I, traction_D));
+  joint_controller_->SetPositionPID(traction_joint_->GetScopedName(), gazebo::common::PID(steering_P, steering_I, steering_D));
 
   return true;
 }
@@ -233,14 +240,10 @@ hardware_interface::return_type GazeboSystem::write()
   for (unsigned int j = 0; j < this->dataPtr->joint_names_.size(); j++) {
     if (this->dataPtr->sim_joints_[j]) {
       if (this->dataPtr->joint_control_methods_[j] & POSITION) {
-        RCLCPP_ERROR(this->nh_->get_logger(), "%s", this->dataPtr->joint_names_[j].c_str());
-        RCLCPP_ERROR(this->nh_->get_logger(), "%f\n",this->dataPtr->joint_position_cmd_[j]);
         joint_controller_->SetPositionTarget(steering_joint_->GetScopedName(), this->dataPtr->joint_position_cmd_[j]);
       } 
       if (this->dataPtr->joint_control_methods_[j] & VELOCITY) {
-        RCLCPP_ERROR(this->nh_->get_logger(), "%s", this->dataPtr->joint_names_[j].c_str());
-        RCLCPP_ERROR(this->nh_->get_logger(), "%f\n",this->dataPtr->joint_velocity_cmd_[j]);
-        joint_controller_->SetVelocityTarget(wheel_front_joint_->GetScopedName(), this->dataPtr->joint_velocity_cmd_[j]);
+        joint_controller_->SetVelocityTarget(traction_joint_->GetScopedName(), this->dataPtr->joint_velocity_cmd_[j]);
       }
     }
   }

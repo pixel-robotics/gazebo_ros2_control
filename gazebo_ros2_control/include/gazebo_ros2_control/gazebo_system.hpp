@@ -76,7 +76,7 @@ private:
   std::unique_ptr<GazeboSystemPrivate> dataPtr;
   boost::shared_ptr<gazebo::physics::JointController> joint_controller_;
   gazebo::physics::JointPtr steering_joint_;
-  gazebo::physics::JointPtr wheel_front_joint_;
+  gazebo::physics::JointPtr traction_joint_;
 };
 
 }  // namespace gazebo_ros2_control
