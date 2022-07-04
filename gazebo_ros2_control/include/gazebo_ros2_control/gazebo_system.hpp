@@ -23,6 +23,7 @@
 #include "angles/angles.h"
 
 #include "gazebo_ros2_control/gazebo_system_interface.hpp"
+#include "gazebo/physics/JointController.hh"
 
 #include "std_msgs/msg/bool.hpp"
 
@@ -71,12 +72,11 @@ private:
     const hardware_interface::HardwareInfo & hardware_info,
     gazebo::physics::ModelPtr parent_model);
 
-  void registerSensors(
-    const hardware_interface::HardwareInfo & hardware_info,
-    gazebo::physics::ModelPtr parent_model);
-
   /// \brief Private data class
   std::unique_ptr<GazeboSystemPrivate> dataPtr;
+  boost::shared_ptr<gazebo::physics::JointController> joint_controller_;
+  gazebo::physics::JointPtr steering_joint_;
+  gazebo::physics::JointPtr wheel_front_joint_;
 };
 
 }  // namespace gazebo_ros2_control
