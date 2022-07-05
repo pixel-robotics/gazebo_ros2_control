@@ -110,8 +110,8 @@ bool GazeboSystem::initSim(
   double traction_I = std::stod(hardware_info.joints[2].parameters.at("I"));
   double traction_D = std::stod(hardware_info.joints[2].parameters.at("D"));
 
-  joint_controller_->SetVelocityPID(steering_joint_->GetScopedName(), gazebo::common::PID(steering_P, steering_I, steering_D));
-  joint_controller_->SetPositionPID(traction_joint_->GetScopedName(), gazebo::common::PID(traction_P, traction_I, traction_D));
+  joint_controller_->SetPositionPID(steering_joint_->GetScopedName(), gazebo::common::PID(steering_P, steering_I, steering_D));
+  joint_controller_->SetVelocityPID(traction_joint_->GetScopedName(), gazebo::common::PID(traction_P, traction_I, traction_D));
 
   return true;
 }
