@@ -75,6 +75,7 @@ public:
 
   // Node Handles
   gazebo_ros::Node::SharedPtr model_nh_;
+  rclcpp::Clock system_clock_{RCL_ROS_TIME};
 
   // Pointer to the model
   gazebo::physics::ModelPtr parent_model_;
@@ -114,7 +115,7 @@ public:
   rclcpp::Duration control_period_ = rclcpp::Duration(1, 0);
 
   // Last time the update method was called
-  rclcpp::Time last_update_sim_time_ros_ = rclcpp::Time((int64_t)0, RCL_ROS_TIME);
+  rclcpp::Time last_update_time_ros_ = rclcpp::Time((int64_t)0, RCL_ROS_TIME);
 };
 
 GazeboRosControlPlugin::GazeboRosControlPlugin()
@@ -363,14 +364,14 @@ void GazeboRosControlPlugin::Load(gazebo::physics::ModelPtr parent, sdf::Element
 void GazeboRosControlPrivate::Update()
 {
   // Get the simulation time and period
-  gazebo::common::Time gz_time_now = parent_model_->GetWorld()->SimTime();
-  rclcpp::Time sim_time_ros(gz_time_now.sec, gz_time_now.nsec, RCL_ROS_TIME);
-  rclcpp::Duration sim_period = sim_time_ros - last_update_sim_time_ros_;
+  rclcpp::Time time_ros = system_clock_.now();
+  // rclcpp::Time time_ros(time_now.sec, time_now.nsec, RCL_ROS_TIME);
+  rclcpp::Duration period = time_ros - last_update_time_ros_;
 
-  if (sim_period >= control_period_) {
+  if (period >= control_period_) {
     controller_manager_->read();
-    controller_manager_->update(sim_time_ros, sim_period);
-    last_update_sim_time_ros_ = sim_time_ros;
+    controller_manager_->update(time_ros, period);
+    last_update_time_ros_ = time_ros;
   }
 
   // Always set commands on joints, otherwise at low control frequencies the joints tremble
@@ -382,7 +383,7 @@ void GazeboRosControlPrivate::Update()
 void GazeboRosControlPrivate::Reset()
 {
   // Reset timing variables to not pass negative update periods to controllers on world reset
-  last_update_sim_time_ros_ = rclcpp::Time((int64_t)0, RCL_ROS_TIME);
+  last_update_time_ros_ = rclcpp::Time((int64_t)0, RCL_ROS_TIME);
 }
 
 // Get the URDF XML from the parameter server
