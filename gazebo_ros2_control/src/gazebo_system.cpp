@@ -21,6 +21,7 @@
 #include "gazebo_ros2_control/gazebo_system.hpp"
 #include "gazebo/sensors/ImuSensor.hh"
 #include "gazebo/sensors/ForceTorqueSensor.hh"
+#include "gazebo/sensors/RaySensor.hh"
 #include "gazebo/sensors/SensorManager.hh"
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
@@ -80,8 +81,14 @@ public:
   /// \brief handles to the FT sensors from within Gazebo
   std::vector<gazebo::sensors::ForceTorqueSensorPtr> sim_ft_sensors_;
 
-  /// \brief An array per FT sensor for 3D force and torquee
+  /// \brief An array per FT sensor for 3D force and torque
   std::vector<std::array<double, 6>> ft_sensor_data_;
+
+  /// \brief handles to the Ray sensors from within Gazebo
+  std::vector<gazebo::sensors::RaySensorPtr> sim_ray_sensors_;
+
+  /// \brief A range per sensor
+  std::vector<double> ray_sensor_data_;
 
   /// \brief state interfaces that will be exported to the Resource Manager
   std::vector<hardware_interface::StateInterface> state_interfaces_;
@@ -221,6 +228,7 @@ void GazeboSystem::registerSensors(
   size_t n_sensors = hardware_info.sensors.size();
   std::vector<hardware_interface::ComponentInfo> imu_components_;
   std::vector<hardware_interface::ComponentInfo> ft_sensor_components_;
+  std::vector<hardware_interface::ComponentInfo> ray_sensor_components_;
 
   // This is split in two steps: Count the number and type of sensor and associate the interfaces
   // So we have resize only once the structures where the data will be stored, and we can safely
@@ -228,7 +236,6 @@ void GazeboSystem::registerSensors(
   for (unsigned int j = 0; j < n_sensors; j++) {
     hardware_interface::ComponentInfo component = hardware_info.sensors[j];
     std::string sensor_name = component.name;
-
     // This can't be used, because it only looks for sensor in links, but force_torque_sensor
     // must be in a joint, as in not found by SensorScopedName
     // std::vector<std::string> gz_sensor_names = parent_model->SensorScopedName(sensor_name);
@@ -289,13 +296,29 @@ void GazeboSystem::registerSensors(
       }
       ft_sensor_components_.push_back(component);
       this->dataPtr->sim_ft_sensors_.push_back(ft_sensor);
+    } else if (simsensor->Type() == "ray") {
+        gazebo::sensors::RaySensorPtr ray_sensor =
+          std::dynamic_pointer_cast<gazebo::sensors::RaySensor>(simsensor);
+        if (!ray_sensor) {
+          RCLCPP_ERROR_STREAM(
+            this->nh_->get_logger(),
+            "Error retrieving casting sensor '" << sensor_name << " to RaySensor");
+          continue;
+        }
+      ray_sensor_components_.push_back(component);
+      this->dataPtr->sim_ray_sensors_.push_back(ray_sensor);
+    } else {
+        RCLCPP_ERROR_STREAM(
+          this->nh_->get_logger(),
+          "The sensor type '" << simsensor->Type() << " is not yet implemented and will not be loaded in ros2_control");
     }
   }
 
   this->dataPtr->imu_sensor_data_.resize(this->dataPtr->sim_imu_sensors_.size());
   this->dataPtr->ft_sensor_data_.resize(this->dataPtr->sim_ft_sensors_.size());
+  this->dataPtr->ray_sensor_data_.resize(this->dataPtr->sim_ray_sensors_.size());
   this->dataPtr->n_sensors_ = this->dataPtr->sim_imu_sensors_.size() +
-    this->dataPtr->sim_ft_sensors_.size();
+    this->dataPtr->sim_ft_sensors_.size() + this->dataPtr->sim_ray_sensors_.size();
 
   for (unsigned int i = 0; i < imu_components_.size(); i++) {
     const std::string & sensor_name = imu_components_[i].name;
@@ -345,6 +368,19 @@ void GazeboSystem::registerSensors(
         sensor_name,
         state_interface.name,
         &this->dataPtr->ft_sensor_data_[i][data_index]);
+    }
+  }
+  for (unsigned int i = 0; i < ray_sensor_components_.size(); i++) {
+    const std::string & sensor_name = ray_sensor_components_[i].name;
+    RCLCPP_INFO_STREAM(this->nh_->get_logger(), "Loading sensor: " << sensor_name);
+    RCLCPP_INFO_STREAM(
+      this->nh_->get_logger(), "\tState:");
+    for (const auto & state_interface : ray_sensor_components_[i].state_interfaces) {
+      RCLCPP_INFO_STREAM(this->nh_->get_logger(), "\t\t " << state_interface.name);
+      this->dataPtr->state_interfaces_.emplace_back(
+        sensor_name,
+        state_interface.name,
+        &this->dataPtr->ray_sensor_data_[i]);
     }
   }
 }
@@ -408,13 +444,18 @@ hardware_interface::return_type GazeboSystem::read()
 
   for (unsigned int j = 0; j < this->dataPtr->sim_ft_sensors_.size(); j++) {
     auto sim_ft_sensor = this->dataPtr->sim_ft_sensors_[j];
-    this->dataPtr->imu_sensor_data_[j][0] = sim_ft_sensor->Force().X();
-    this->dataPtr->imu_sensor_data_[j][1] = sim_ft_sensor->Force().Y();
-    this->dataPtr->imu_sensor_data_[j][2] = sim_ft_sensor->Force().Z();
+    this->dataPtr->ft_sensor_data_[j][0] = sim_ft_sensor->Force().X();
+    this->dataPtr->ft_sensor_data_[j][1] = sim_ft_sensor->Force().Y();
+    this->dataPtr->ft_sensor_data_[j][2] = sim_ft_sensor->Force().Z();
 
-    this->dataPtr->imu_sensor_data_[j][3] = sim_ft_sensor->Torque().X();
-    this->dataPtr->imu_sensor_data_[j][4] = sim_ft_sensor->Torque().Y();
-    this->dataPtr->imu_sensor_data_[j][5] = sim_ft_sensor->Torque().Z();
+    this->dataPtr->ft_sensor_data_[j][3] = sim_ft_sensor->Torque().X();
+    this->dataPtr->ft_sensor_data_[j][4] = sim_ft_sensor->Torque().Y();
+    this->dataPtr->ft_sensor_data_[j][5] = sim_ft_sensor->Torque().Z();
+  }
+
+  for (unsigned int j = 0; j < this->dataPtr->sim_ray_sensors_.size(); j++) {
+    auto sim_ray_sensor = this->dataPtr->sim_ray_sensors_[j];
+    this->dataPtr->ray_sensor_data_[j] = sim_ray_sensor->Range(0); // TODO: is it okay to use the first ray if this is meant ot be a distance sensor?
   }
   return hardware_interface::return_type::OK;
 }
